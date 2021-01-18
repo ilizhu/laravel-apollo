@@ -14,6 +14,10 @@ return [
      */
     'appid' => 'demo',
     /**
+     * apollo 鉴权密钥
+     */
+    'accessKeySecret' => NULL,
+    /**
      * 读取的namespace
      */
     'namespaces' => ['application'],

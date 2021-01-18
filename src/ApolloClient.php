@@ -2,6 +2,8 @@
 
 namespace ilizhu\LaravelApollo;
 
+use Carbon\Carbon;
+
 class ApolloClient
 {
     protected $configServer; //apollo服务端地址
@@ -11,6 +13,7 @@ class ApolloClient
     protected $notifications = [];
     protected $pullTimeout = 10; //获取某个namespace配置的请求超时时间
     protected $intervalTimeout = 80; //每次请求获取apollo配置变更时的超时时间
+    protected $accessKeySecret = NULL; // Apollo鉴权密钥
     public $save_dir; //配置保存目录
 
     /**
@@ -69,6 +72,12 @@ class ApolloClient
         return $this->save_dir.DIRECTORY_SEPARATOR.'apolloConfig.'.$namespaceName.'.php';
     }
 
+    //设置鉴权秘钥
+    public function setAccessKeySecret($accessKeySecret)
+    {
+        $this->accessKeySecret = $accessKeySecret;
+    }
+
     //获取单个namespace的配置-无缓存的方式
     public function pullConfig($namespaceName) {
         $base_api = rtrim($this->configServer, '/').'/configs/'.$this->appId.'/'.$this->cluster.'/';
@@ -107,7 +116,8 @@ class ApolloClient
         if (! $namespaceNames) return [];
         $multi_ch = curl_multi_init();
         $request_list = [];
-        $base_url = rtrim($this->configServer, '/').'/configs/'.$this->appId.'/'.$this->cluster.'/';
+        $path             = '/configs/' . $this->appId . '/' . $this->cluster . '/';
+        $base_url         = rtrim($this->configServer, '/') . $path;
         $query_args = [];
         $query_args['ip'] = $this->clientIp;
         foreach ($namespaceNames as $namespaceName) {
@@ -121,6 +131,15 @@ class ApolloClient
             curl_setopt($ch, CURLOPT_TIMEOUT, $this->pullTimeout);
             curl_setopt($ch, CURLOPT_HEADER, false);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            if ($this->accessKeySecret) {
+                $header    = [];
+                $now       = Carbon::now();
+                $timestamp = intval($now->timestamp * 1000 + $now->micro / 1000);
+                $header[]  = "Timestamp: $timestamp";
+                $signature = base64_encode(hash_hmac('sha1', "$timestamp\n$path$namespaceName$query_string", $this->accessKeySecret, TRUE));
+                $header[]  = "Authorization: Apollo $this->appId:$signature";
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+            }
             $request['ch'] = $ch;
             $request['config_file'] = $config_file;
             $request_list[$namespaceName] = $request;
@@ -174,6 +193,16 @@ class ApolloClient
             $params['notifications'] = json_encode(array_values($this->notifications));
             $query = http_build_query($params);
             curl_setopt($ch, CURLOPT_URL, $base_url.$query);
+            if ($this->accessKeySecret) {
+                $header    = [];
+                $now       = Carbon::now();
+                $timestamp = intval($now->timestamp * 1000 + $now->micro / 1000);
+                $header[]  = "Timestamp: $timestamp";
+                $signature = base64_encode(hash_hmac('sha1', "$timestamp\n/notifications/v2?$query",
+                    $this->accessKeySecret, TRUE));
+                $header[]  = "Authorization: Apollo $this->appId:$signature";
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+            }
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch,CURLINFO_HTTP_CODE);
             $error = curl_error($ch);

@@ -53,6 +53,7 @@ class ApolloService
         $server = new ApolloClient(
             config('apollo.server'), config('apollo.appid'), config('apollo.namespaces'));
         $server->save_dir = config('apollo.save_dir');
+        $server->setAccessKeySecret(config('apollo.accessKeySecret'));
         return $server;
     }
 
