@@ -1,0 +1,14 @@
+{
+    "name": "ilizhu/laravel-apollo",
+    "authors": [
+        {
+            "name": "zhuge",
+            "email": "zhuge.ai@qq.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "ilizhu\\LaravelApollo\\":"src/"
+        }
+    }
+}
