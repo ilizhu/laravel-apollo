@@ -1,4 +1,4 @@
-# laravel 接入携程 [Apollo](https://github.com/ctripcorp/apollo)
+# laravel 接入携程 [Apollo](https://ctripcorp.github.io/apollo/#/zh/README)
 
 
 ## 概述
