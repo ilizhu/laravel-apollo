@@ -12,7 +12,7 @@ class ApolloClient
     protected $clientIp = '127.0.0.1'; //绑定IP做灰度发布用
     protected $notifications = [];
     protected $pullTimeout = 10; //获取某个namespace配置的请求超时时间
-    protected $intervalTimeout = 80; //每次请求获取apollo配置变更时的超时时间
+    protected $intervalTimeout = 80; //每次请求获取apollo配置变更时的超时时间,由于Apollo服务端会hold住请求60秒，所以请确保客户端访问服务端的超时时间要大于60秒
     protected $accessKeySecret = NULL; // Apollo鉴权密钥
     public $save_dir; //配置保存目录
 
@@ -58,6 +58,7 @@ class ApolloClient
         $this->intervalTimeout = $intervalTimeout;
     }
 
+    //获取上一次的releaseKey,用来给服务端比较版本
     private function _getReleaseKey($config_file) {
         $releaseKey = '';
         if (file_exists($config_file)) {
@@ -72,6 +73,14 @@ class ApolloClient
         return $this->save_dir.DIRECTORY_SEPARATOR.'apolloConfig.'.$namespaceName.'.php';
     }
 
+    //写入配置
+    private function _writeConfigFile($config_file,$content) {
+        if (!is_dir($this->save_dir)){
+            mkdir($this->save_dir,0777,true);
+        }
+        return (bool) file_put_contents($config_file, $content);
+    }
+
     //设置鉴权秘钥
     public function setAccessKeySecret($accessKeySecret)
     {
@@ -80,21 +89,19 @@ class ApolloClient
 
     //获取单个namespace的配置-无缓存的方式
     public function pullConfig($namespaceName) {
-        $base_api = rtrim($this->configServer, '/').'/configs/'.$this->appId.'/'.$this->cluster.'/';
-        $api = $base_api.$namespaceName;
-
+        $path             = '/configs/' . $this->appId . '/' . $this->cluster . '/';
+        $base_url         = rtrim($this->configServer, '/') . $path;
+        $api = $base_url.$path.$namespaceName;
         $args = [];
         $args['ip'] = $this->clientIp;
         $config_file = $this->getConfigFile($namespaceName);
         $args['releaseKey'] = $this->_getReleaseKey($config_file);
-
         $api .= '?' . http_build_query($args);
-
         $ch = curl_init($api);
         curl_setopt($ch, CURLOPT_TIMEOUT, $this->pullTimeout);
         curl_setopt($ch, CURLOPT_HEADER, false);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-
+        $this->_setHttpHeaders($ch,"$path$namespaceName".'?'.http_build_query($args));
         $body = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
@@ -103,7 +110,7 @@ class ApolloClient
         if ($httpCode == 200) {
             $result = json_decode($body, true);
             $content = '<?php return ' . var_export($result, true) . ';';
-            file_put_contents($config_file, $content);
+            $this->_writeConfigFile($config_file,$content);
         }elseif ($httpCode != 304) {
             echo $body ?: $error."\n";
             return false;
@@ -131,15 +138,7 @@ class ApolloClient
             curl_setopt($ch, CURLOPT_TIMEOUT, $this->pullTimeout);
             curl_setopt($ch, CURLOPT_HEADER, false);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-            if ($this->accessKeySecret) {
-                $header    = [];
-                $now       = Carbon::now();
-                $timestamp = intval($now->timestamp * 1000 + $now->micro / 1000);
-                $header[]  = "Timestamp: $timestamp";
-                $signature = base64_encode(hash_hmac('sha1', "$timestamp\n$path$namespaceName$query_string", $this->accessKeySecret, TRUE));
-                $header[]  = "Authorization: Apollo $this->appId:$signature";
-                curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
-            }
+            $this->_setHttpHeaders($ch,"$path$namespaceName$query_string");
             $request['ch'] = $ch;
             $request['config_file'] = $config_file;
             $request_list[$namespaceName] = $request;
@@ -174,7 +173,7 @@ class ApolloClient
             if ($code == 200) {
                 $result = json_decode($result, true);
                 $content = '<?php return '.var_export($result, true).';';
-                file_put_contents($req['config_file'], $content);
+                $this->_writeConfigFile($req['config_file'],$content);
             }elseif ($code != 304) {
                 echo 'pull config of namespace['.$namespaceName.'] error:'.($result ?: $error)."\n";
                 $response_list[$namespaceName] = false;
@@ -193,16 +192,7 @@ class ApolloClient
             $params['notifications'] = json_encode(array_values($this->notifications));
             $query = http_build_query($params);
             curl_setopt($ch, CURLOPT_URL, $base_url.$query);
-            if ($this->accessKeySecret) {
-                $header    = [];
-                $now       = Carbon::now();
-                $timestamp = intval($now->timestamp * 1000 + $now->micro / 1000);
-                $header[]  = "Timestamp: $timestamp";
-                $signature = base64_encode(hash_hmac('sha1', "$timestamp\n/notifications/v2?$query",
-                    $this->accessKeySecret, TRUE));
-                $header[]  = "Authorization: Apollo $this->appId:$signature";
-                curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
-            }
+            $this->_setHttpHeaders($ch,"/notifications/v2?$query");
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch,CURLINFO_HTTP_CODE);
             $error = curl_error($ch);
@@ -224,6 +214,20 @@ class ApolloClient
                 throw new \Exception($response ?: $error);
             }
         }while (true);
+    }
+
+    //设置请求headers
+    private function _setHttpHeaders($curl,$data){
+        if ($this->accessKeySecret) {
+            $header    = [];
+            $now       = Carbon::now();
+            $timestamp = intval($now->timestamp * 1000 + $now->micro / 1000);
+            $header[]  = "Timestamp: $timestamp";
+            $signature = base64_encode(hash_hmac('sha1', "$timestamp\n$data",
+                $this->accessKeySecret, TRUE));
+            $header[]  = "Authorization: Apollo $this->appId:$signature";
+            curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
+        }
     }
 
     /**

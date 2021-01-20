@@ -15,20 +15,20 @@ Apollo（阿波罗）是携程框架部门研发的分布式配置中心，能�
 composer require ilizhu/laravel-apollo
 ```
 
-- 配置发布 
-  
-把`/laravel-apollo/config/apollo.php`拷贝放到配置目录
-#### 或执行
-```shell
-php artisan vendor:publish --provider ilizhu\LaravelApollo\ApolloServiceProvider
-```
-
 - 服务提供者`config/app.php`引入
 
 ```php
  'providers' => [
     \ilizhu\LaravelApollo\ApolloServiceProvider::class
  ],
+```
+
+- 配置发布 
+  
+把`/laravel-apollo/config/apollo.php`拷贝放到配置目录
+#### 或执行
+```shell
+php artisan vendor:publish --provider="ilizhu\LaravelApollo\ApolloServiceProvider"
 ```
 
 
