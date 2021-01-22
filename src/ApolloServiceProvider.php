@@ -20,6 +20,7 @@ class ApolloServiceProvider extends ServiceProvider
         ]);
         $input = new InputVar($this->app['apollo.cache']);
         $input->input();
+        $this->app->make(\Illuminate\Foundation\Bootstrap\LoadConfiguration::class)->bootstrap($this->app);
     }
 
     /**
