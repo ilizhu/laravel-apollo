@@ -11,8 +11,8 @@ class ApolloClient
     protected $cluster = 'default';
     protected $clientIp = '127.0.0.1'; //绑定IP做灰度发布用
     protected $notifications = [];
-    protected $pullTimeout = 10; //获取某个namespace配置的请求超时时间
-    protected $intervalTimeout = 80; //每次请求获取apollo配置变更时的超时时间,由于Apollo服务端会hold住请求60秒，所以请确保客户端访问服务端的超时时间要大于60秒
+    protected $pullTimeout = 10; //获取每个namespace配置的请求超时时间
+    protected $intervalTimeout = 70; //每次请求获取apollo配置变更时的超时时间,由于Apollo服务端会hold住请求60秒，所以请确保客户端访问服务端的超时时间要大于60秒
     protected $accessKeySecret = NULL; // Apollo鉴权密钥
     public $save_dir; //配置保存目录
 
